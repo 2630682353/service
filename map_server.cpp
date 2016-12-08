@@ -6,6 +6,7 @@
 #include <string.h>
 #include <event2/event.h>
 #include <event2/bufferevent.h>
+#include <iostream>
 #include <map>
 #define LISTEN_PORT 9999
 #define LISTEN_BACKLOG 32
@@ -71,7 +72,7 @@ void do_accept(evutil_socket_t listener, short event, void *arg)
     struct event_base *base = (struct event_base *)arg;
     evutil_socket_t fd;
     struct sockaddr_in sin;
-    socklen_t slen;
+    socklen_t slen = sizeof(sin);
     fd = accept(listener, (struct sockaddr *)&sin, &slen);
     if (fd < 0) {
         perror("accept");
@@ -130,14 +131,17 @@ void read_cb(struct bufferevent *bev, void *arg)
                 int val = -1;
                 bufferevent_write(bev, &head, sizeof(head));
                 bufferevent_write(bev, &val, 4);
-            } else  {
+            } else {
+
                 mapStudent.insert(pair<int,struct bufferevent*>(head.from, bev));
+                cout<<head.from<<"上线\n";
                 head.to = head.from;
                 head.from = 0;
                 head.totallen = sizeof(head) + 4;
                 int val = 0;
                 bufferevent_write(bev, &head, sizeof(head));
                 bufferevent_write(bev, &val, 4);
+                
             } 
             break;
         case 1:
@@ -163,14 +167,17 @@ void error_cb(struct bufferevent *bev, short event, void *arg)
 {
     evutil_socket_t fd = bufferevent_getfd(bev);
     printf("fd = %u, ", fd);
-    if (event & BEV_EVENT_TIMEOUT) {
-        printf("Timed out\n"); //if bufferevent_set_timeouts() called
-    }
-    else if (event & BEV_EVENT_EOF) {
+    if (event & BEV_EVENT_EOF) {
         printf("connection closed\n");
     }
     else if (event & BEV_EVENT_ERROR) {
         printf("some other error\n");
     }
+    for(iter = mapStudent.begin(); iter != mapStudent.end(); iter++)  
+            if ((struct bufferevent *)(iter->second) == bev) {
+                mapStudent.erase(iter); 
+                cout<<iter->first<<"下线"<<endl;
+                break;
+            }
     bufferevent_free(bev);
 }
