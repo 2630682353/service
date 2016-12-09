@@ -13,6 +13,10 @@
 # define bzero(S1, LEN)     ((void)memset(S1,  0, LEN))
 using namespace std;
 
+enum type{
+    LOGIN = 0,
+    MSG
+};
 void do_accept(evutil_socket_t listener, short event, void *arg);
 void read_cb(struct bufferevent *bev, void *arg);
 void error_cb(struct bufferevent *bev, short event, void *arg);
@@ -122,7 +126,7 @@ void read_cb(struct bufferevent *bev, void *arg)
     }while(ret>0 && st != 2);
     if (st == 2) {
         switch (head.type) {
-        case 0:
+        case LOGIN:
             iter = mapStudent.find(head.from);
             if(iter != mapStudent.end()) {
                 head.to = head.from;
@@ -144,7 +148,7 @@ void read_cb(struct bufferevent *bev, void *arg)
                 
             } 
             break;
-        case 1:
+        case MSG:
             iter = mapStudent.find(head.to);
             if(iter != mapStudent.end()) {         
                 bufferevent_write((struct bufferevent*)(iter->second), line, ret);
