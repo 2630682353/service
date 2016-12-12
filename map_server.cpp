@@ -15,15 +15,14 @@ using namespace std;
 
 enum type{
     LOGIN = 0,
-    MSG
+    MSG,
+    BEAT
 };
 void do_accept(evutil_socket_t listener, short event, void *arg);
 void read_cb(struct bufferevent *bev, void *arg);
 void error_cb(struct bufferevent *bev, short event, void *arg);
-void write_cb(struct bufferevent *bev, void *arg);
-
-map<int, struct bufferevent*> mapStudent;  
-map<int, struct bufferevent*>::iterator iter;  
+void write_cb(struct bufferevent *bev, void *arg); 
+void timeout_cb(int fd, short event, void *params);
   
 struct msg_head{
     int type;
@@ -32,6 +31,16 @@ struct msg_head{
     int totallen;
 };
 
+class Client_info 
+{
+public:
+    int heart_beat;
+    struct bufferevent *bev;
+    Client_info(int hb, struct bufferevent *bev_arg):heart_beat(hb),bev(bev_arg){};
+};
+
+map<int, Client_info *> mapStudent;  
+map<int, Client_info *>::iterator iter; 
 
 int main(int argc, char *argv[])
 {
@@ -64,11 +73,30 @@ int main(int argc, char *argv[])
     assert(base != NULL);
     struct event *listen_event;
     listen_event = event_new(base, listener, EV_READ|EV_PERSIST, do_accept, (void*)base);
+    struct event *heart_timer;
+    heart_timer = event_new(base, -1, EV_PERSIST, timeout_cb, NULL);
+    struct timeval heart_tv = {20, 0};
     event_add(listen_event, NULL);
+    event_add(heart_timer, &heart_tv);
     event_base_dispatch(base);
 
     printf("The End.");
     return 0;
+}
+
+void timeout_cb(int fd, short event, void *params)
+{
+    for(iter = mapStudent.begin(); iter != mapStudent.end(); iter++) {
+            if (((Client_info *)(iter->second))->heart_beat == 0) {
+                mapStudent.erase(iter); 
+                delete(iter->second);
+                cout<<iter->first<<"没心跳下线"<<endl;
+                bufferevent_free(((Client_info *)(iter->second))->bev); 
+                continue;
+            }
+            ((Client_info *)(iter->second))->heart_beat = 0;
+        }  
+    cout<<"心跳检查"<<endl;     
 }
 
 void do_accept(evutil_socket_t listener, short event, void *arg)
@@ -136,8 +164,8 @@ void read_cb(struct bufferevent *bev, void *arg)
                 bufferevent_write(bev, &head, sizeof(head));
                 bufferevent_write(bev, &val, 4);
             } else {
-
-                mapStudent.insert(pair<int,struct bufferevent*>(head.from, bev));
+                Client_info *ci = new Client_info(4, bev);
+                mapStudent.insert(pair<int,Client_info *>(head.from, ci));
                 cout<<head.from<<"上线\n";
                 head.to = head.from;
                 head.from = 0;
@@ -151,7 +179,21 @@ void read_cb(struct bufferevent *bev, void *arg)
         case MSG:
             iter = mapStudent.find(head.to);
             if(iter != mapStudent.end()) {         
-                bufferevent_write((struct bufferevent*)(iter->second), line, ret);
+                bufferevent_write(((Client_info *)(iter->second))->bev, line, ret);
+            } else {
+                head.to = head.from;
+                head.from = 0;
+                head.totallen = sizeof(head) + 4;
+                int val = -2;
+                bufferevent_write(bev, &head, sizeof(head));
+                bufferevent_write(bev, &val, 4);
+            }
+            break;
+        case BEAT:
+            iter = mapStudent.find(head.from);
+            if(iter != mapStudent.end()) { 
+                ((Client_info *)(iter->second))->heart_beat++;
+                cout<<head.from<<"的心跳来了"<<endl;           
             } else {
                 head.to = head.from;
                 head.from = 0;
@@ -178,8 +220,9 @@ void error_cb(struct bufferevent *bev, short event, void *arg)
         printf("some other error\n");
     }
     for(iter = mapStudent.begin(); iter != mapStudent.end(); iter++)  
-            if ((struct bufferevent *)(iter->second) == bev) {
+            if (((Client_info *)(iter->second))->bev == bev) {
                 mapStudent.erase(iter); 
+                delete(iter->second);
                 cout<<iter->first<<"下线"<<endl;
                 break;
             }

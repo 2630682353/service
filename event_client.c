@@ -41,6 +41,22 @@ void * get_input(void *arg)
 		send(sockfd, msg_data, head.totallen, 0);
 	}
 }
+void * heart_send(void *arg) {
+	int sockfd = *(int *)arg;
+	char heart_data[64] = {0};
+	struct msg_head head;
+	int toid = 0;
+	int len;
+	while (1) {
+		head.type = 2;
+		head.from = userid;
+		head.to = toid;
+		head.totallen = sizeof(head) + 4;
+		memcpy(heart_data, &head, sizeof(head));
+		send(sockfd, heart_data, head.totallen, 0);
+		sleep(5);
+	}
+}
 int main(int argc, char *argv[])
 {
 	userid = atoi(argv[1]);
@@ -55,7 +71,9 @@ int main(int argc, char *argv[])
 	} else {
 		login(sockfd);
 		pthread_t tid1;
+		pthread_t tid2;
 		pthread_create(&tid1, NULL, get_input, &sockfd);
+		pthread_create(&tid2, NULL, heart_send, &sockfd);
 		struct timeval tv;
 		tv.tv_sec = 60;
 		tv.tv_usec = 0;
