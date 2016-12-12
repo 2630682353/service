@@ -29,6 +29,8 @@ struct msg_head{
     int from;
     int to;
     int totallen;
+    int totalnum;
+    int index;
 };
 
 class Client_info 

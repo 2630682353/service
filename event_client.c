@@ -11,7 +11,10 @@ struct msg_head{
     int from;
     int to;
     int totallen;
+    int totalnum;
+    int index;
 };
+#define MAX_PACKAGE 1400
 int login(int sockfd);
 int userid = -1;
 
