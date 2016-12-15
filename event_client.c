@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <fcntl.h>
 struct msg_head{
     int type;
     int from;
@@ -17,8 +18,108 @@ struct msg_head{
 #define MAX_PACKAGE 1400
 int login(int sockfd);
 int userid = -1;
+int file_package_num = 0;
+int file_package_current = 0;
+int fd;
+
 
 void * get_input(void *arg)
+{
+	int sockfd = *(int *)arg;
+	char msg_data[MAX_PACKAGE] = {0};
+	char c_model[8] = {0};
+	int model;
+	struct msg_head head;
+	int toid = 0;
+	int len;
+	char buf[MAX_PACKAGE] = {0};
+	int datalen;
+	char *first = NULL;
+	while (1) {
+		printf("1 发文件 2 发信息\n");
+
+		fgets(c_model, 8, stdin);
+		model = atoi(c_model);
+		switch (model) {
+		case 1:
+			printf("发文件：\n");
+			fgets(buf, MAX_PACKAGE, stdin);
+			first = strstr(buf, " ");
+			if (first == NULL) {
+				printf("input error\n");
+				continue;
+			}
+			*first = '\0';
+			toid = atoi(buf);
+			head.type = 3;
+			head.from = userid;
+			head.to = toid;
+			first[strlen(first+1)] = '\0';
+			int fd;
+			if ((fd = open(first+1, O_RDONLY)) < 0) {
+				printf("open error\n");
+				continue;
+			}
+			struct stat stat1;
+			stat(first+1, &stat1);
+			int size = (unsigned int)stat1.st_size;
+			head.totalnum = 0;
+			head.index = 1;
+			datalen = MAX_PACKAGE-sizeof(head);
+			if (size > datalen) {
+				unsigned char temp[datalen*4];
+				head.totalnum = size%datalen > 0 ? size/datalen+1:size/datalen;
+				
+				int n;
+				while((n = read(fd, temp, datalen*4)) > 0){
+					int i = 0;
+					while(n - datalen > 0) {
+						head.totallen = MAX_PACKAGE;
+						send(sockfd, &head, sizeof(head), 0);
+						send(sockfd, &temp[datalen*i], datalen,0);
+						i++;
+						n = n - datalen;
+						head.index++;
+					}
+					head.totallen = sizeof(head) + n;
+					send(sockfd, &head, sizeof(head), 0);
+					send(sockfd, &temp[datalen*i], n, 0);
+					head.index++;
+				}
+			} else {
+				int n;
+				unsigned char temp[datalen];
+				if ((n = read(fd, temp, datalen)) > 0) {
+					head.totallen = sizeof(head) + n;
+					send(sockfd, &head, sizeof(head), 0);
+					send(sockfd, temp, n, 0);
+				}
+
+			}
+			break;
+		case 2:
+			printf("发信息：\n");
+			fgets(buf, MAX_PACKAGE, stdin);
+			first = strstr(buf, " ");
+			if (first == NULL) {
+				printf("input error\n");
+				continue;
+			}
+			*first = '\0';
+			toid = atoi(buf);
+			head.type = 1;
+			head.from = userid;
+			head.to = toid;
+			head.totallen = sizeof(head) + strlen(first+1);
+			memcpy(msg_data, &head, sizeof(head));
+			memcpy(&msg_data[sizeof(head)], first+1, strlen(first+1));
+			send(sockfd, msg_data, head.totallen, 0);
+			break;
+		}
+	}
+}
+
+void * file_send(void *arg)
 {
 	int sockfd = *(int *)arg;
 	char msg_data[512] = {0};
@@ -44,6 +145,7 @@ void * get_input(void *arg)
 		send(sockfd, msg_data, head.totallen, 0);
 	}
 }
+
 void * heart_send(void *arg) {
 	int sockfd = *(int *)arg;
 	char heart_data[64] = {0};
@@ -83,6 +185,8 @@ int main(int argc, char *argv[])
 		fd_set fds;
 		while (1) {
 			FD_SET(sockfd, &fds);
+			tv.tv_sec = 60;
+			tv.tv_usec = 0;
 			if (select(sockfd + 1, &fds, NULL, NULL, &tv)) {
 				if (errno == EINTR || errno == EAGAIN)
 					continue;
@@ -105,8 +209,8 @@ int main(int argc, char *argv[])
 int login(int sockfd)
 {
 	char data[256] = {0};
-	int login_msg[5] = {0};
-	struct msg_head head = {0, 1, 2, 5};
+	int login_msg[7] = {0};
+	struct msg_head head = {0, 1, 2, 5, 0, 0};
 	head.from = userid;
 	memcpy(login_msg, &head, sizeof(head));
 	send(sockfd, login_msg, sizeof(login_msg), 0);
@@ -149,13 +253,30 @@ int get_msg(int sockfd)
         }
     }while(ret>0 && st != 2);
     if (st == 2) {
-    	switch (head.from) {
-    		case 0:
-    			printf("error\n");
-    			break;
-    		default:
+    	if (head.from == 0) {
+    		printf("error\n");
+    		return 0;
+    	}
+    	switch (head.type) {
+    		case 1:
     			line[ret] = 0;
     			printf("%d msg received: from %d to %d datais:%s\n",userid, head.from, head.to, &line[sizeof(head)]);
+    			break;
+    		case 3:
+    			if (head.totalnum == 0) {
+    				fd = open("recevied", O_RDWR | O_CREAT | O_TRUNC);
+    				printf("recevied\n");
+    				write(fd, &line[sizeof(head)], head.totallen - sizeof(head));
+    				close(fd);
+    			} else {
+    				if (head.index == 1)
+    					fd = open("recevied", O_RDWR | O_CREAT | O_TRUNC);
+    				write(fd, &line[sizeof(head)], head.totallen - sizeof(head));
+    				printf("recevied\n");
+    				if (head.index == head.totalnum)
+    					close(fd);
+    			}
+
     	}
     	
     }

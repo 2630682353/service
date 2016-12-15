@@ -16,7 +16,8 @@ using namespace std;
 enum type{
     LOGIN = 0,
     MSG,
-    BEAT
+    BEAT,
+    TRANS_FILE
 };
 void do_accept(evutil_socket_t listener, short event, void *arg);
 void read_cb(struct bufferevent *bev, void *arg);
@@ -126,7 +127,7 @@ void do_accept(evutil_socket_t listener, short event, void *arg)
 
 void read_cb(struct bufferevent *bev, void *arg)
 {
-#define MAX_LINE    512
+#define MAX_LINE    1400
     char line[MAX_LINE+1];
     int n;
  //   evutil_socket_t fd = bufferevent_getfd(bev);
@@ -196,6 +197,19 @@ void read_cb(struct bufferevent *bev, void *arg)
             if(iter != mapStudent.end()) { 
                 ((Client_info *)(iter->second))->heart_beat++;
                 cout<<head.from<<"的心跳来了"<<endl;           
+            } else {
+                head.to = head.from;
+                head.from = 0;
+                head.totallen = sizeof(head) + 4;
+                int val = -2;
+                bufferevent_write(bev, &head, sizeof(head));
+                bufferevent_write(bev, &val, 4);
+            }
+            break;
+        case TRANS_FILE:
+            iter = mapStudent.find(head.to);
+            if(iter != mapStudent.end()) {         
+                bufferevent_write(((Client_info *)(iter->second))->bev, line, ret);
             } else {
                 head.to = head.from;
                 head.from = 0;
