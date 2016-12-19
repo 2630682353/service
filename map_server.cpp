@@ -78,7 +78,7 @@ int main(int argc, char *argv[])
     listen_event = event_new(base, listener, EV_READ|EV_PERSIST, do_accept, (void*)base);
     struct event *heart_timer;
     heart_timer = event_new(base, -1, EV_PERSIST, timeout_cb, NULL);
-    struct timeval heart_tv = {20, 0};
+    struct timeval heart_tv = {100, 0};
     event_add(listen_event, NULL);
     event_add(heart_timer, &heart_tv);
     event_base_dispatch(base);

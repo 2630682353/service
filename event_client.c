@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <errno.h>
 #include <fcntl.h>
 struct msg_head{
@@ -85,6 +86,7 @@ void * get_input(void *arg)
 					send(sockfd, &head, sizeof(head), 0);
 					send(sockfd, &temp[datalen*i], n, 0);
 					head.index++;
+					usleep(5000);
 				}
 			} else {
 				int n;
@@ -159,7 +161,7 @@ void * heart_send(void *arg) {
 		head.totallen = sizeof(head) + 4;
 		memcpy(heart_data, &head, sizeof(head));
 		send(sockfd, heart_data, head.totallen, 0);
-		sleep(5);
+		sleep(30);
 	}
 }
 int main(int argc, char *argv[])
@@ -225,7 +227,7 @@ int login(int sockfd)
 }
 int get_msg(int sockfd)
 {
-#define MAX_LINE    512
+#define MAX_LINE    1400
     char line[MAX_LINE+1];
     int n;
     struct msg_head head;
@@ -264,15 +266,15 @@ int get_msg(int sockfd)
     			break;
     		case 3:
     			if (head.totalnum == 0) {
-    				fd = open("recevied", O_RDWR | O_CREAT | O_TRUNC);
-    				printf("recevied\n");
+    				fd = open("recevied0", O_RDWR | O_CREAT | O_TRUNC);
+    				printf("recevied0\n");
     				write(fd, &line[sizeof(head)], head.totallen - sizeof(head));
     				close(fd);
     			} else {
     				if (head.index == 1)
     					fd = open("recevied", O_RDWR | O_CREAT | O_TRUNC);
+    				printf("recevied total:%d current %d size:%d\n", head.totalnum, head.index, head.totallen - sizeof(head));
     				write(fd, &line[sizeof(head)], head.totallen - sizeof(head));
-    				printf("recevied\n");
     				if (head.index == head.totalnum)
     					close(fd);
     			}
